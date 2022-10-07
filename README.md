@@ -7,4 +7,4 @@ CPA(Correlation Power Analysis)
 
   -Power consumption is proportional to the number of 1 intermediate values in the operation.
 
-  - If the key guess is correct, the correlation coefficient is high.
+  -If the key guess is correct, the correlation coefficient is high.
