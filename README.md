@@ -5,7 +5,7 @@
   * Power consumption is proportional to the number of 1 intermediate values in the operation.
   * If the key guess is correct, the correlation coefficient is high.
 ***
-#SEED CPA
+# SEED CPA
 + **CPA**
   + **Coreelation Power Analysis**
     + 전력분석 공격은 장비 내부에서 연산되는 데이터 값, 연산코드 값에 의존해 전력/전자파를 소비하고, 일반적으로 데이터의 해밍웨이트에 의존하여 전력/전자파를 소비한다.
@@ -238,4 +238,198 @@
 	+ 결과를 보면 1라운드 키가 2C1034D1 FA0B755D가 나온 것을 확인할 수 있다.
 	
 	![제목 없음](https://user-images.githubusercontent.com/84726924/197335702-685d7bc5-bab8-4bd4-bc00-7feceaf68f6d.png)
++ **1라운드 암호화**
+	+ 2라운드 키를 찾기 위해선 1라운드 암호화를 진행해야한다. 암호화는 알고리즘 그대로 진행하면 되고 굳이 2라운드의 Left평문을 구해줄 필요는 없다. 왜냐하면 2라운드 Right평문이 F함수에 들어가고 그 F함수 중간에서 CPA 진행 후 K2,0 , K2,1값을 구하기 때문이다. 2라운드 키를 얻는 방법은 1라운드와 동일하다.
+	```
+	void Round1_ENC(ULONG key0, ULONG key1) {
+	for (int i = 0; i < TraceNum; i++) {
+		ULONG L[2] = { 0 }, R[2] = { 0 }, temp[2];
+		ULONG K[2] = { key0, key1 };
+		//L,R로 평문을 나눔
+		L[0] = out_32bit(&plaintext[i][0]);
+		L[1] = out_32bit(&plaintext[i][4]);
+		R[0] = out_32bit(&plaintext[i][8]);
+		R[1] = out_32bit(&plaintext[i][12]);
+		//F함수
+		temp[0] = R[0] ^ K[0];
+		temp[1] = R[1] ^ K[1];
+
+		temp[1] ^= temp[0];
+
+		SEED_G(temp + 1);
+		temp[0] += temp[1];
+
+		SEED_G(temp);
+		temp[1] += temp[0];
+
+		SEED_G(temp + 1);
+		temp[0] += temp[1];
+
+		L[0] ^= temp[0];
+		L[1] ^= temp[1];
+		//Left->Right
+		//Right->Left는 필요없음. 2라운드 F함수에서 CPA가 완료됨
+		plaintext[i][11] = L[0] & 0xff;
+		L[0] = L[0] >> 8;
+		plaintext[i][10] = L[0] & 0xff;
+		L[0] = L[0] >> 8;
+		plaintext[i][9] = L[0] & 0xff;
+		L[0] = L[0] >> 8;
+		plaintext[i][8] = L[0] & 0xff;
+		plaintext[i][15] = L[1] & 0xff;
+		L[1] = L[1] >> 8;
+		plaintext[i][14] = L[1] & 0xff;
+		L[1] = L[1] >> 8;
+		plaintext[i][13] = L[1] & 0xff;
+		L[1] = L[1] >> 8;
+		plaintext[i][12] = L[1] & 0xff;
+	}
+	}
+	```
+	![제목 없음](https://user-images.githubusercontent.com/84726924/197335810-8f1bf4fe-1a17-432e-9bf6-ad373353759f.png)
++ **K2,0 K2,1**
+	+ 1라운드 암호화 후 1라운드와 동일한 방식으로 CPA를 하면 2라운드 키 0F0F8713 114B07B6을 얻을 수 있다.
 	
+	![제목 없음](https://user-images.githubusercontent.com/84726924/197335834-0e8b5241-64f3-4bf7-9649-cc99b3dc74e4.png)
+	+ K2,0값 중에 01블록에 87을 보면 일부분에서 파형이 튀는 걸 확인할 수 있다. 상관계수가 높지 않다면 저렇게 튀는 부분이 없다. 그러한 점이 보인다면 잘못된 키이다.
+	
+	![제목 없음](https://user-images.githubusercontent.com/84726924/197335856-c390147c-582a-4442-ac81-78954b94b6a1.png)
++ **마스터 키**
+	+ 먼저 X,Y,Z,V까지는 Inv G함수연산 후 라운드 상수와 덧셈, 뺄셈 연산으로 구할 수 있다. 그리고 (X=A+C, Y=B-D, Z=A′+C, V=B′-D) ↔ (X-Z=A-A′, Y-V=B-B′)이다. 그래서 1byte 변수들에 A-A′, B-B′을 각 각 1byte씩 쪼개서 담는다. (A-A′)|(B-B′)=(A|B)-(A′|B′)가 되는데 (A-A′)|(B-B′)는 아는 값이고 (A|B)-(A′|B′)에서 B, A′은 모르는 값이다. 여기서 (A|B)=a|b|c|d |e|f|g|h이고 (A′|B′)=h|a|b|c|d|e|f|g이다. 즉, (A|B)를 오른쪽으로 8비트 쉬프트 해준 게 (A′|B′)이다. (A|B)-(A′|B′)=x1 x2 x3 x4 x5 x6 x7 x8이라고 하면 이 8비트는 아는 값이다. 그리고 a~h 중 a가 미지수면 x1을 알고 있기 때문에 h를 구할 수 있다. 이 부분에서도 carry발생을 고려해야 하고 맨 앞에서 설정한 h가 뒤에서 설정한 h이면 마스터키 후보가 된다.
+	
+	![제목 없음](https://user-images.githubusercontent.com/84726924/197335915-aa60fe1c-f3c9-43e6-89f9-4cf4cada07b5.png)
+	![제목 없음](https://user-images.githubusercontent.com/84726924/197335927-a4c61800-9fd1-4501-8044-20c6f3b44fdd.png)
+	+ 마스터 키 후보군을 찾는 구현 코드는 아래와 같다. 마스터키 후보군들은 txt파일로 저장한다.
+	```
+	void cal_masterkey(void) {
+	FILE* f_masterKey;
+	ULONG T0[2] = { 0 }, T1[2] = { 0 };
+
+	T0[0] = RK[0][0]; //K1,0
+	T1[0] = RK[0][1]; //K1,1
+	T0[1] = RK[1][0]; //K2,0
+	T1[1] = RK[1][1]; //K2,1
+	SEED_G_INV(&T0[0]);
+	SEED_G_INV(&T0[1]);
+	SEED_G_INV(&T1[0]);
+	SEED_G_INV(&T1[1]);
+
+	//SEED 키스케쥴 함수에서 사용되는 라운드 상수
+	T0[0] += SEED_KC[0];
+	T0[1] += SEED_KC[1];
+	T1[0] -= SEED_KC[0];
+	T1[1] -= SEED_KC[1];
+
+	ULONG X = 0x89111111; // T0[0] - T0[1]
+	ULONG Y = 0x11111111; // T1[0] - T1[1]
+
+	f_masterKey = fopen("C:\\", "wb"); //마스터 키 위치
+	if (f_masterKey == NULL) {
+		printf("File Open Error4!!\n");
+	}
+	
+	for (int i = 0x0; i <= 0xff; i++) {
+		int A[4] = { 0 }, B[4] = { 0 };
+		A[0] += i & 0xff;
+		A[1] += A[0] - (X & 0xff);
+		if (A[1] < 0) {
+			A[1] += 0x100;
+			A[2]--;
+		}
+		A[2] += A[1] - ((X >> 8) & 0xff);
+		if (A[2] < 0) {
+			A[2] += 0x100;
+			A[3]--;
+		}
+		A[3] += A[2] - ((X >> 16) & 0xff);
+		if (A[3] < 0) {
+			A[3] += 0x100;
+			B[0]--;
+		}
+		B[0] += A[3] - ((X >> 24) & 0xff);
+		if (B[0] < 0) {
+			B[0] += 0x100;
+		}
+		B[1] += B[0] - (Y & 0xff);
+		if (B[1] < 0) {
+			B[1] += 0x100;
+			B[2]--;
+		}
+		B[2] += B[1] - ((Y >> 8) & 0xff);
+		if (B[2] < 0) {
+			B[2] += 0x100;
+			B[3]--;
+		}
+		B[3] += B[2] - ((Y >> 16) & 0xff);
+		if (B[3] < 0) {
+			B[3] += 0x100;
+		}
+
+		UCHAR AA[4], BB[4];
+		for (int j = 0; j < 4; j++) {
+			AA[3 - j] = (UCHAR)A[j];
+			BB[3 - j] = (UCHAR)B[j];
+		}
+
+		ULONG AAA = out_32bit(&AA[0]);
+		ULONG BBB = out_32bit(&BB[0]);
+		ULONG C = T0[0] - AAA;
+		ULONG D = BBB - T1[0];
+
+		if (AAA + C != T0[0] || BBB - D != T1[0]) {
+			continue;
+		}
+
+		TwoWordRRot(AAA, BBB);
+
+		if (AAA + C != T0[1] || BBB - D != T1[1]) {
+			continue;
+		}
+
+		TwoWordLRot(AAA, BBB);
+		//printf("Master Key : %08X%08X%08X%08X\n", AAA, BBB, C, D);
+		fprintf(f_masterKey, "%08X%08X%08X%08X\n", AAA, BBB, C, D);
+	}
+	fclose(f_masterKey);
+	}
+	```
+	+ Inv_G함수 구현은 아래와 같다. 이 부분은 SEED G의 역함수를 참고하여 구현하면 된다.
+	```
+	void SEED_G_INV(ULONG* S) {
+	UCHAR Z[4];
+	Z[0] = ((*S) >> 0) & 0xFF;
+	Z[1] = ((*S) >> 8) & 0xFF;
+	Z[2] = ((*S) >> 16) & 0xFF;
+	Z[3] = ((*S) >> 24) & 0xFF;
+
+	UCHAR U[4];
+	U[0] = Z[0] ^ Z[1] ^ Z[2];
+	U[1] = Z[0] ^ Z[1] ^ Z[3];
+	U[2] = Z[0] ^ Z[2] ^ Z[3];
+	U[3] = Z[1] ^ Z[2] ^ Z[3];
+
+	UCHAR Y[4];
+	Y[0] = SEED_S1box_inv[(U[0] & 0xC0) ^ (U[1] & 0x30) ^ (U[2] & 0x0C) ^ (U[3] & 0x03)];
+	Y[1] = SEED_S2box_inv[(U[0] & 0x03) ^ (U[1] & 0xC0) ^ (U[2] & 0x30) ^ (U[3] & 0x0C)];
+	Y[2] = SEED_S1box_inv[(U[0] & 0x0C) ^ (U[1] & 0x03) ^ (U[2] & 0xC0) ^ (U[3] & 0x30)];
+	Y[3] = SEED_S2box_inv[(U[0] & 0x30) ^ (U[1] & 0x0C) ^ (U[2] & 0x03) ^ (U[3] & 0xC0)];
+
+	ULONG X = Y[3];
+	X = X << 8;
+	X += Y[2];
+	X = X << 8;
+	X += Y[1];
+	X = X << 8;
+	X += Y[0];
+
+	(*S) = X;
+	}
+	```
+	+ 마스터 키 후보군들이다. 총 150개가 조금 넘는다. 여기서 마스터 키는 00,11,22,33,44,55,66, 77,88,99,AA,BB,CC,DD,EE,FF이다.
+	
+	![제목 없음](https://user-images.githubusercontent.com/84726924/197336062-91524a6c-be5e-4180-bb60-68f91be2d6f8.png)
++ **암호문 복호화**
+	+ CPA로 구한 마스터 키와 암호문을 복호화하면 평문을 얻을 수 있다.
+	
+	![제목 없음](https://user-images.githubusercontent.com/84726924/197336099-c2ea136c-a2f5-4adc-a035-2167756aef17.png)
+	+ 복호화 하여 얻은 16진수 평문을 유니코드(UTF-8) 한글 코드표를 참고하여 변환하면 된다.
