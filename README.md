@@ -1,3 +1,11 @@
+# 기술 스택
+### ✔Programming Language
+<img src="https://img.shields.io/badge/C-00599C?style=for-the-badge&logo=C&logoColor=white">
+
+### ✔Tool
+<img src="https://img.shields.io/badge/Visual Studio-5C2D91?style=for-the-badge&logo=Visual Studio&logoColor=white">
+
+***
 # SEED_CPA_Implementation
 * **CPA(Correlation Power Analysis)**
   * Power analysis attacks consume power/electromagnetic waves depending on data values and computational code values calculated inside the equipment, and generally rely on Hamming weights of data to consume power/electromagnetic waves.
